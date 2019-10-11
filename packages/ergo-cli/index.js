@@ -15,15 +15,77 @@
 
 'use strict';
 
-const Commands = require('../lib/commands');
+const Commands = require('./lib/commands');
 const Moment = require('moment-mini');
 const Logger = require('@accordproject/ergo-compiler').Logger;
 
 require('yargs')
-    .command('execute', 'execute an Ergo contract with a request', (yargs) => {
-        yargs.demandOption(['contract', 'request'], 'Please provide at least the contract data and request');
-        yargs.usage('Usage: $0 --contract [file] --state [file] --request [file] [ctos] [ergos]');
-        yargs.option('contract', {
+    .scriptName('ergo')
+    .demandCommand(1, '# Please specify a command')
+    .recommendCommands()
+    .strict()
+    .command('draft', 'create a contract text from data', (yargs) => {
+        yargs.demandOption(['data'], 'Please provide at least the contract data');
+        yargs.usage('Usage: $0 draft --data [file] [ctos] [ergos]');
+        yargs.option('data', {
+            describe: 'path to the contract data'
+        });
+        yargs.option('currentTime', {
+            describe: 'the current time',
+            type: 'string',
+            default: Moment().format() // Defaults to now
+        });
+        yargs.option('wrapVariables', {
+            describe: 'wrap variables in curly braces',
+            type: 'boolean',
+            default: false
+        });
+        yargs.option('template', {
+            describe: 'path to the template (.tem) file',
+            type: 'string',
+            default: null
+        });
+        yargs.option('warnings', {
+            describe: 'print warnings',
+            type: 'boolean',
+            default: false
+        });
+    }, (argv) => {
+        let ctoPaths = [];
+        let ergoPaths = [];
+
+        const files = argv._;
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            if (file.split('.').pop() === 'cto') {
+                //Logger.info('Found CTO: ' + file);
+                ctoPaths.push(file);
+            } else if (file.split('.').pop() === 'ergo') {
+                //Logger.info('Found Ergo: ' + file);
+                ergoPaths.push(file);
+            }
+        }
+
+        if (argv.verbose) {
+            Logger.info(`generateText for Ergo ${ergoPaths} over data ${argv.contract}`);
+        }
+
+        const options = {
+            wrapVariables: argv.wrapVariables,
+        };
+        // Generate text
+        Commands.generateText(ergoPaths, ctoPaths, { file: argv.contract }, argv.currentTime, argv.template ? { file: argv.template } : null, options)
+            .then((result) => {
+                Logger.info(result.response);
+            })
+            .catch((err) => {
+                Logger.error(err.message + '\n' + JSON.stringify(err));
+            });
+    })
+    .command('request', 'send a request to the contract', (yargs) => {
+        yargs.demandOption(['data', 'request'], 'Please provide at least the contract data and a request');
+        yargs.usage('Usage: $0 request --data [file] --state [file] --request [file] [cto files] [ergo files]');
+        yargs.option('data', {
             describe: 'path to the contract data'
         });
         yargs.option('state', {
@@ -77,13 +139,13 @@ require('yargs')
                 Logger.error(err.message);
             });
     })
-    .command('invoke', 'invoke a clause for an Ergo contract', (yargs) => {
-        yargs.demandOption(['clauseName', 'contract', 'state', 'params'], 'Please provide at least the clauseName, with contract data, state, and params');
-        yargs.usage('Usage: $0 --contract [file] --state [file] --params [file] [ctos] [ergos]');
+    .command('invoke', 'invoke a clause of the contract', (yargs) => {
+        yargs.demandOption(['clauseName', 'data', 'state', 'params'], 'Please provide at least the clauseName, with contract data, state, and parameters');
+        yargs.usage('Usage: $0 invoke --data [file] --state [file] --params [file] [cto files] [ergo files]');
         yargs.option('clauseName', {
             describe: 'the name of the clause to invoke'
         });
-        yargs.option('contract', {
+        yargs.option('data', {
             describe: 'path to the contract data'
         });
         yargs.option('state', {
@@ -139,10 +201,10 @@ require('yargs')
                 Logger.error(err.message);
             });
     })
-    .command('init', 'invoke init for an Ergo contract', (yargs) => {
-        yargs.demandOption(['contract'], 'Please provide at least contract and params');
-        yargs.usage('Usage: $0 --contract [file] --params [file] [ctos] [ergos]');
-        yargs.option('contract', {
+    .command('initialize', 'initialize the state for a contract', (yargs) => {
+        yargs.demandOption(['data'], 'Please provide at least contract data and parameters');
+        yargs.usage('Usage: $0 intialize --data [file] --params [file] [cto files] [ergo files]');
+        yargs.option('data', {
             describe: 'path to the contract data'
         });
         yargs.option('currentTime', {
@@ -189,26 +251,22 @@ require('yargs')
                 Logger.error(err.message);
             });
     })
-    .command('generateText', 'invoke generateText for an Ergo contract', (yargs) => {
-        yargs.demandOption(['contract'], 'Please provide at least the contract data');
-        yargs.usage('Usage: $0 --contract [file] [ctos] [ergos]');
-        yargs.option('contract', {
-            describe: 'path to the contract data'
-        });
-        yargs.option('currentTime', {
-            describe: 'the current time',
+    .command('compile', 'compile a contract', (yargs) => {
+        yargs.usage('Usage: $0 compile --target [lang] --link --monitor --warnings [cto files] [ergo files]');
+        yargs.option('target', {
+            describe: 'Target platform (available: es5,es6,cicero,java)',
             type: 'string',
-            default: Moment().format() // Defaults to now
+            default: 'es6'
         });
-        yargs.option('wrapVariables', {
-            describe: 'wrap variables in curly braces',
+        yargs.option('link', {
+            describe: 'Link the Ergo runtime with the target code (es5,es6,cicero only)',
             type: 'boolean',
             default: false
         });
-        yargs.option('template', {
-            describe: 'path to the template (.tem) file',
-            type: 'string',
-            default: null
+        yargs.option('monitor', {
+            describe: 'Produce compilation time information',
+            type: 'boolean',
+            default: false
         });
         yargs.option('warnings', {
             describe: 'print warnings',
@@ -216,36 +274,21 @@ require('yargs')
             default: false
         });
     }, (argv) => {
-        let ctoPaths = [];
-        let ergoPaths = [];
-
-        const files = argv._;
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            if (file.split('.').pop() === 'cto') {
-                //Logger.info('Found CTO: ' + file);
-                ctoPaths.push(file);
-            } else if (file.split('.').pop() === 'ergo') {
-                //Logger.info('Found Ergo: ' + file);
-                ergoPaths.push(file);
+        try {
+            // Removes the `compile`
+            const args = [process.argv[0],process.argv[1]].concat(process.argv.slice(3));
+            for (let i = 0; i < args.length; i++) {
+                if (args[i].split('.').pop() === 'cto') {
+                    const ctoPath = args[i];
+                    Commands.parseCTOtoFile(ctoPath);
+                    args[i] = ctoPath.substr(0, ctoPath.lastIndexOf('.')) + '.ctoj';
+                }
             }
+            process.argv = args;
+            require('./extracted/ergoccore.js');
+        } catch (err) {
+            Logger.error(err.message);
         }
-
-        if (argv.verbose) {
-            Logger.info(`generateText for Ergo ${ergoPaths} over data ${argv.contract}`);
-        }
-
-        const options = {
-            wrapVariables: argv.wrapVariables,
-        };
-        // Generate text
-        Commands.generateText(ergoPaths, ctoPaths, { file: argv.contract }, argv.currentTime, argv.template ? { file: argv.template } : null, options)
-            .then((result) => {
-                Logger.info(result.response);
-            })
-            .catch((err) => {
-                Logger.error(err.message + '\n' + JSON.stringify(err));
-            });
     })
     .option('verbose', {
         alias: 'v',
